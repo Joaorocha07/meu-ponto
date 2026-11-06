@@ -84,7 +84,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
           <span className="metric-icon"><ClipboardList size={18} aria-hidden="true" /></span>
           <div>
             <strong>{pendentes.length === 1 ? "1 dia precisa de conferência" : `${pendentes.length} dias precisam de conferência`}</strong>
-            <small>Eles não entram na conta. Uma falta só é somada depois que o RH processa o dia.</small>
+            <small>Eles não entram na conta até serem conferidos.</small>
           </div>
           <Link className="btn btn-primary btn-sm" href={linkCartao}>Conferir agora <ArrowRight size={15} aria-hidden="true" /></Link>
         </div>

@@ -226,6 +226,11 @@ function classificar(dia: DiaApi, jornada: Jornada | null, confiavel: boolean, h
   if (marcacoes.length === 0 && !rotulo) {
     if (saldoServidor) return r("confirmado", saldoServidor);
     if (dia.situacao === 0 && esperado?.minutos === 0) return r("folga", 0);
+    // Dia útil passado sem marcações conta como falta. Se o RH já processou e deixou zerado, vale o RH:
+    // o dia não vira dívida, porque pode ser um afastamento sem código nas marcações.
+    if (dia.situacao !== 0 && confiavel && esperado?.minutos) {
+      return r("estimado", -esperado.minutos, "Falta: aguardando processamento do RH");
+    }
     return r("a_conferir", null, "Sem marcações: pode ser falta ou registro não lançado");
   }
 

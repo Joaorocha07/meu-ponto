@@ -30,10 +30,12 @@ O saldo da API só é confiável depois que o RH processa o dia, então cada dia
 | Folga ou feriado | Saldo zero | Sim |
 | Hoje, com marcações faltando | Em andamento | Não |
 | Marcações em número ímpar | Incompleto | Não, e gera aviso |
-| Sem marcações, lançamento desconhecido, trabalho em dia sem jornada ou jornada duvidosa | A conferir | Não, e gera aviso |
+| Dia útil passado sem marcações, não processado | Falta: a jornada inteira negativa (estimado) | Sim |
+| Lançamento desconhecido, trabalho em dia sem jornada, jornada duvidosa ou dia processado zerado sem marcações | A conferir | Não, e gera aviso |
 
-Um dia sem nenhuma marcação ainda não processado aparece como aviso, e não como horas devidas, porque pode ser falta
-ou registro não lançado.
+Um dia útil passado sem nenhuma marcação, ainda não processado, conta como falta: a jornada inteira entra negativa como
+estimativa, mesmo que depois seja um atestado ou registro não lançado. Hoje não é cobrado enquanto o dia não termina. Se o
+RH processou o dia e deixou o saldo zerado, ele não vira dívida e fica "a conferir".
 
 O significado de `diaSemana` não foi confirmado. `alinharJornada` deduz a numeração pela jornada do usuário: se o item
 0 tem horas e o item 6 não, a lista começa na segunda; nos outros casos, assume 0 = domingo. O app também compara a

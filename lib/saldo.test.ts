@@ -108,9 +108,23 @@ describe("casos que não podem gerar dívida falsa", () => {
     expect(d).toMatchObject({ status: "confirmado", saldoMinutos: 0, rotulo: "ABONO" });
   });
 
-  it("não assume falta em dia útil sem marcações", () => {
+  it("conta como falta o dia útil passado sem marcações, com a jornada inteira negativa", () => {
     const d = umDia(dia("2026-11-03", ["", "", "", ""], { situacao: 1 }));
-    expect(d).toMatchObject({ status: "a_conferir", saldoMinutos: null });
+    expect(d).toMatchObject({ status: "estimado", saldoMinutos: -480, motivo: "Falta: aguardando processamento do RH" });
+    expect(calcularResumo([dia("2026-11-03", ["", "", "", ""], { situacao: 1 })], jornada, HOJE)).toMatchObject({ saldoMinutos: -480, pendentes: 0 });
+  });
+
+  it("não cobra hoje como falta enquanto o dia não termina", () => {
+    const d = umDia(dia(HOJE, ["", "", "", ""], { situacao: 1 }));
+    expect(d).toMatchObject({ status: "em_andamento", saldoMinutos: null });
+  });
+
+  it("não cobra falta em dia sem jornada, sem jornada lida ou que o RH processou zerado", () => {
+    const sabado = calcularResumo([dia("2026-10-24", ["", "", "", ""], { situacao: 1 })], jornada, HOJE).dias[0];
+    expect(sabado).toMatchObject({ saldoMinutos: null });
+    const semJornada = calcularResumo([dia("2026-11-03", ["", "", "", ""], { situacao: 1 })], null, HOJE).dias[0];
+    expect(semJornada).toMatchObject({ status: "a_conferir", saldoMinutos: null });
+    expect(umDia(dia("2026-11-03", ["", "", "", ""], { situacao: 0 }))).toMatchObject({ status: "a_conferir", saldoMinutos: null });
   });
 
   it("aceita falta quando o servidor já processou o déficit", () => {

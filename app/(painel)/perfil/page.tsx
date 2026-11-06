@@ -2,10 +2,16 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { mapearPerfil, type DadosPerfil } from "@/lib/perfil";
+import { alinharJornada, formatarDuracao } from "@/lib/saldo";
 import { buscarDadosAdicionais, buscarFuncionario, SecullumError } from "@/lib/secullum";
 import { lerSessao } from "@/lib/sessao";
 
 export const dynamic = "force-dynamic";
+
+/** Índices de `alinharJornada`: 0 = domingo. */
+const DIAS_SEMANA = [
+  [1, "Segunda"], [2, "Terça"], [3, "Quarta"], [4, "Quinta"], [5, "Sexta"], [6, "Sábado"], [0, "Domingo"],
+] as const;
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
@@ -41,6 +47,7 @@ export default async function Perfil() {
 
   const nome = dados?.nome ?? (sessao.primeiroNome || "Funcionário");
   const usaFolha = sessao.cred.tipo === 0;
+  const jornada = alinharJornada(sessao.jornada);
 
   return (
     <>
@@ -92,6 +99,17 @@ export default async function Perfil() {
                 {dados.bancoHoras === null ? null : dados.bancoHoras ? "Habilitado" : "Não habilitado"}
               </Linha>
             </dl>
+            {jornada && (
+              <>
+                <div className="card-head"><div><h2>Jornada usada no cálculo</h2><p>Como o app leu seu horário. Se um dia estiver errado, as estimativas dele não valem.</p></div></div>
+                <dl className="dados">
+                  {DIAS_SEMANA.map(([indice, rotulo]) => {
+                    const minutos = jornada[indice]?.minutos;
+                    return <Linha key={indice} rotulo={rotulo}>{minutos ? formatarDuracao(minutos) : "Sem jornada"}</Linha>;
+                  })}
+                </dl>
+              </>
+            )}
           </section>
         </div>
       )}

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  alinharJornada,
   calcularResumo,
   classeSaldo,
   extrairJornada,
   formatarSaldo,
+  formatarSaldoCurto,
   jornadaConfiavel,
   parseSaldo,
   type DiaApi,
@@ -69,8 +71,12 @@ describe("exemplo do PDF", () => {
     expect(statusDe("2026-11-04")).toMatchObject({ status: "estimado", saldoMinutos: -54 });
   });
 
-  it("não considera 30/10, com só 2 marcações, como dia completo", () => {
-    expect(statusDe("2026-10-30")).toMatchObject({ status: "incompleto", saldoMinutos: null });
+  it("estima como negativo 30/10, que teve só 3h 50min de uma jornada de 8h", () => {
+    expect(statusDe("2026-10-30")).toMatchObject({
+      status: "estimado",
+      saldoMinutos: -250,
+      motivo: "Aguardando processamento do RH",
+    });
   });
 
   it("não cobra jornada em folga e feriado", () => {
@@ -81,9 +87,9 @@ describe("exemplo do PDF", () => {
   it("soma o período e conta as pendências", () => {
     expect(calcularResumo(exemploPdf, jornada, HOJE)).toMatchObject({
       confirmadoMinutos: 77,
-      estimadoMinutos: -54,
-      saldoMinutos: 23,
-      pendentes: 1,
+      estimadoMinutos: -304,
+      saldoMinutos: -227,
+      pendentes: 0,
     });
   });
 });
@@ -121,6 +127,27 @@ describe("casos que não podem gerar dívida falsa", () => {
     expect(d).toMatchObject({ status: "estimado", saldoMinutos: 30 });
   });
 
+  it("não transforma em hora extra um dia com marcações e jornada zero", () => {
+    const resumo = calcularResumo([dia("2026-10-24", ["08:00", "12:00", "", ""], { situacao: 1 })], jornada, HOJE);
+    expect(resumo.dias[0]).toMatchObject({ status: "a_conferir", saldoMinutos: null });
+    expect(resumo.saldoMinutos).toBe(0);
+  });
+
+  it("estima dia com marcações faltando que o servidor devolveu zerado como processado", () => {
+    const d = umDia(dia("2026-11-03", ["08:00", "12:00", "", ""], { situacao: 0 }));
+    expect(d).toMatchObject({ status: "estimado", saldoMinutos: -240 });
+  });
+
+  it("estima positivo quando passa da jornada", () => {
+    const d = umDia(dia("2026-11-03", ["08:00", "11:00", "12:00", "18:00"], { situacao: 1 }));
+    expect(d).toMatchObject({ status: "estimado", saldoMinutos: 60 });
+  });
+
+  it("mantém o saldo processado de um dia sem jornada", () => {
+    const d = umDia(dia("2026-10-24", ["08:00", "12:00"], { saldo: "+04:00" }));
+    expect(d).toMatchObject({ status: "confirmado", saldoMinutos: 240 });
+  });
+
   it("ignora datas futuras", () => {
     expect(calcularResumo([dia("2026-11-06", ["", ""])], jornada, HOJE).dias).toHaveLength(0);
   });
@@ -133,6 +160,49 @@ describe("casos que não podem gerar dívida falsa", () => {
   it("deixa número ímpar de marcações como incompleto, mesmo processado", () => {
     const d = umDia(dia("2026-11-03", ["08:00", "", "", ""], { saldo: "-08:00" }));
     expect(d.status).toBe("incompleto");
+  });
+});
+
+describe("alinharJornada", () => {
+  const comecaNaSegunda = extrairJornada([
+    { diaSemana: 0, ...util },
+    { diaSemana: 1, ...util },
+    { diaSemana: 2, ...util },
+    { diaSemana: 3, ...util },
+    { diaSemana: 4, entrada1: "08:00", saida1: "12:00" },
+    { diaSemana: 5 },
+    { diaSemana: 6 },
+  ]) as Jornada;
+
+  it("mantém a jornada que já começa no domingo", () => {
+    expect(alinharJornada(jornada)).toEqual(jornada);
+    expect(alinharJornada(null)).toBeNull();
+  });
+
+  it("corrige a lista que começa na segunda", () => {
+    const alinhada = alinharJornada(comecaNaSegunda) as Jornada;
+    expect(alinhada[1].minutos).toBe(480); // segunda
+    expect(alinhada[5].minutos).toBe(240); // sexta
+    expect(alinhada[6].minutos).toBe(0); // sábado
+    expect(alinhada[0].minutos).toBe(0); // domingo
+  });
+
+  it("pode ser reaplicada sem deslocar de novo", () => {
+    const alinhada = alinharJornada(comecaNaSegunda);
+    expect(alinharJornada(alinhada)).toEqual(alinhada);
+  });
+
+  it("calcula a sexta com a jornada de cada usuário", () => {
+    const resumo = calcularResumo([dia("2026-10-30", ["08:19", "12:09", "", ""], { situacao: 1 })], comecaNaSegunda, HOJE);
+    expect(resumo.dias[0]).toMatchObject({ status: "estimado", saldoMinutos: -10 });
+  });
+
+  it("calcula 30/10 como negativo mesmo com a lista começando na segunda", () => {
+    const oito = extrairJornada([0, 1, 2, 3, 4].map((d) => ({ diaSemana: d, ...util })).concat(
+      [5, 6].map((d) => ({ diaSemana: d })) as never,
+    )) as Jornada;
+    const resumo = calcularResumo([dia("2026-10-30", ["08:19", "12:09", "", ""], { situacao: 1 })], oito, HOJE);
+    expect(resumo.dias[0]).toMatchObject({ status: "estimado", saldoMinutos: -250 });
   });
 });
 
@@ -179,7 +249,22 @@ describe("formatos", () => {
     expect(parseSaldo("+00:23")).toBe(23);
     expect(parseSaldo("-01:05")).toBe(-65);
     expect(parseSaldo("")).toBeNull();
-    expect(formatarSaldo(-54)).toBe("−00:54");
-    expect(formatarSaldo(0)).toBe("+00:00");
+  });
+
+  it("escreve a unidade do saldo", () => {
+    expect(formatarSaldo(23)).toBe("+23 min");
+    expect(formatarSaldo(-54)).toBe("−54 min");
+    expect(formatarSaldo(83)).toBe("+1h 23min");
+    expect(formatarSaldo(-83)).toBe("−1h 23min");
+    expect(formatarSaldo(480)).toBe("+8h");
+    expect(formatarSaldo(0)).toBe("0 min");
+  });
+
+  it("encurta o saldo para o gráfico sem perder a unidade", () => {
+    expect(formatarSaldoCurto(54)).toBe("+54min");
+    expect(formatarSaldoCurto(-83)).toBe("−1h23");
+    expect(formatarSaldoCurto(65)).toBe("+1h05");
+    expect(formatarSaldoCurto(-480)).toBe("−8h");
+    expect(formatarSaldoCurto(0)).toBe("0min");
   });
 });

@@ -159,8 +159,9 @@ small { font-size: 12px; color: var(--muted); }
 .lembrar { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
 .lembrar input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--ink); cursor: pointer; }
 .lembrar small { display: block; margin-top: 2px; font-weight: 400; }
-.link-esquecer { justify-self: center; min-height: 44px; margin-top: -8px; padding: 0 12px; border: 0; border-radius: var(--pill); background: none; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.link-esquecer { display: inline-flex; align-items: center; justify-self: center; min-height: 44px; margin-top: -8px; padding: 0 12px; border: 0; border-radius: var(--pill); background: none; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .link-esquecer:hover { color: var(--ink); }
+.email-oculto { overflow-wrap: anywhere; }
 .form-error { padding: 12px 14px; border: 1px solid var(--ink); border-radius: 14px; font-size: 13px; font-weight: 500; }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -239,6 +240,9 @@ small { font-size: 12px; color: var(--muted); }
 .page-head p { color: var(--muted); margin-top: 6px; }
 .saldo-periodo { font-variant-numeric: tabular-nums; }
 
+.compensacao-mes { margin-bottom: 20px; }
+.compensacao-mes .card-head { padding-bottom: 16px; }
+
 .dropdown { position: relative; }
 .menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 200px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-lg); padding: 8px; z-index: 60; animation: rise .15s ease; }
 .menu button, .menu a { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: none; border: 0; text-align: left; font-size: 13px; }
@@ -312,6 +316,11 @@ small { font-size: 12px; color: var(--muted); }
 .celula-marcas { color: var(--muted); font-variant-numeric: tabular-nums; }
 .celula-marcas small { display: block; }
 .celula-saldo { font-family: var(--display); font-weight: 800; font-variant-numeric: tabular-nums; }
+.dia-compensado { margin-top: 4px; color: var(--ink); font-weight: 600; }
+.compensar-mes { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin-bottom: 20px; }
+.janela { width: min(420px, calc(100vw - 32px)); padding: 24px; color: inherit; }
+.janela::backdrop { background: rgba(0, 0, 0, .4); }
+.janela-botoes { display: flex; justify-content: flex-end; gap: 10px; }
 
 /* Meu perfil */
 .aviso-perfil { margin-bottom: 20px; }
@@ -410,5 +419,4 @@ small { font-size: 12px; color: var(--muted); }
   .table td { display: block; padding: 0; border: 0; min-width: 0; }
   .celula-marcas { grid-column: 1 / -1; grid-row: 2; overflow-wrap: anywhere; }
   .celula-marcas:empty { display: none; }
-  .celula-status { grid-column: 1 / -1; grid-row: 3; margin-top: 4px; }
-}
+  .celula-status { grid-column: 1 / -1; grid-row: 3; margin-top: 4px; }}

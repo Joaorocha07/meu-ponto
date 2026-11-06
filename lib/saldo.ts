@@ -94,6 +94,16 @@ export function extrairJornada(itens: unknown): Jornada | null {
   return jornada;
 }
 
+/**
+ * A numeração de diaSemana não é documentada. Devolve a jornada com 0 = domingo: se o item 0 tem horas
+ * e o item 6 não, a lista começa na segunda, porque o contrário seria trabalhar domingo e folgar sábado.
+ * Pode ser reaplicada, e vale também para sessões criadas antes desta regra.
+ */
+export function alinharJornada(jornada: Jornada | null): Jornada | null {
+  if (!jornada?.[0]?.minutos || !jornada[6] || jornada[6].minutos > 0) return jornada;
+  return Object.fromEntries(Object.entries(jornada).map(([dia, valor]) => [(Number(dia) + 1) % 7, valor]));
+}
+
 const dataIso = (dia: DiaApi) => dia.data.slice(0, 10);
 
 function diaDaSemana(iso: string): number {
@@ -120,9 +130,11 @@ export function jornadaConfiavel(jornada: Jornada | null, dias: DiaApi[]): boole
     const trabalhado = minutosTrabalhados(marcacoesDe(dia));
     const saldo = parseSaldo(dia.saldo);
     if (!trabalhado || saldo === null) continue;
+    const esperado = jornada[diaDaSemana(dataIso(dia))];
+    // Saldo zerado com marcações faltando é um sinal enganoso, não evidência sobre a jornada.
+    if (saldo === 0 && esperado && marcacoesDe(dia).length < esperado.marcacoes) continue;
     evidencias++;
-    const esperado = jornada[diaDaSemana(dataIso(dia))]?.minutos ?? 0;
-    if (Math.abs(trabalhado - saldo - esperado) > MARGEM_JORNADA_MIN) divergencias++;
+    if (Math.abs(trabalhado - saldo - (esperado?.minutos ?? 0)) > MARGEM_JORNADA_MIN) divergencias++;
   }
   return evidencias === 0 || divergencias * 2 < evidencias;
 }
@@ -160,20 +172,22 @@ function classificar(dia: DiaApi, jornada: Jornada | null, confiavel: boolean, h
   }
 
   if (dia.situacao === 0 && saldoServidor !== null) {
-    // Saldo zerado com marcações faltando é o mesmo sinal enganoso visto em dias não processados.
-    // Um lançamento como ABONO explica a falta de marcações.
-    if (saldoServidor === 0 && faltamMarcacoes && !rotulo) return r("incompleto", null, "Faltam marcações");
-    return r("confirmado", saldoServidor);
+    // Saldo zerado com marcações faltando é o mesmo sinal enganoso visto em dias não processados, e
+    // segue para a estimativa. Um lançamento como ABONO explica a falta de marcações.
+    if (saldoServidor !== 0 || !faltamMarcacoes || rotulo) return r("confirmado", saldoServidor);
   }
 
   if (rotulo) return r("a_conferir", null, `Lançamento "${rotulo}" ainda não processado`);
-  if (!confiavel || !esperado) return r("a_conferir", null, "Jornada do dia não pôde ser confirmada");
-  if (faltamMarcacoes) return r("incompleto", null, "Faltam marcações");
+  // Trabalho em dia sem jornada espera o RH: não dá para distinguir hora extra de jornada lida errada.
+  if (!confiavel || !esperado || esperado.minutos === 0) {
+    return r("a_conferir", null, "Jornada do dia não pôde ser confirmada");
+  }
   if (trabalhado === null) return r("a_conferir", null, "Marcações fora de ordem");
   return r("estimado", trabalhado - esperado.minutos, "Aguardando processamento do RH");
 }
 
-export function calcularResumo(lista: DiaApi[], jornada: Jornada | null, hoje: string): Resumo {
+export function calcularResumo(lista: DiaApi[], jornadaApi: Jornada | null, hoje: string): Resumo {
+  const jornada = alinharJornada(jornadaApi);
   const passados = lista.filter((d) => dataIso(d) <= hoje);
   const confiavel = jornadaConfiavel(jornada, passados);
   const dias = passados
@@ -203,12 +217,8 @@ export function classeSaldo(minutos: number | null): "saldo-negativo" | "saldo-p
   return minutos < 0 ? "saldo-negativo" : "saldo-positivo";
 }
 
-/** Ex.: +00:23 e −00:54, com o sinal de menos tipográfico. */
-export function formatarSaldo(minutos: number): string {
-  const abs = Math.abs(minutos);
-  const texto = `${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
-  return `${minutos < 0 ? "−" : "+"}${texto}`;
-}
+/** Sem sinal no zero. O menos é o tipográfico. */
+const sinal = (minutos: number) => (minutos < 0 ? "−" : minutos > 0 ? "+" : "");
 
 /** Ex.: 54 min, 8h ou 1h 23min. */
 export function formatarDuracao(minutos: number): string {
@@ -217,4 +227,18 @@ export function formatarDuracao(minutos: number): string {
   const m = abs % 60;
   if (h === 0) return `${m} min`;
   return m === 0 ? `${h}h` : `${h}h ${m}min`;
+}
+
+/** Sempre com a unidade, para não confundir horas e minutos. Ex.: +23 min, −1h 23min ou 0 min. */
+export function formatarSaldo(minutos: number): string {
+  return `${sinal(minutos)}${formatarDuracao(minutos)}`;
+}
+
+/** Para espaços estreitos, como as colunas do gráfico. Ex.: +54min, −1h23 ou +8h. */
+export function formatarSaldoCurto(minutos: number): string {
+  const abs = Math.abs(minutos);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h === 0) return `${sinal(minutos)}${m}min`;
+  return `${sinal(minutos)}${h}h${m === 0 ? "" : String(m).padStart(2, "0")}`;
 }

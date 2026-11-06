@@ -1,7 +1,9 @@
 import "server-only";
+import { lerEmailOculto, lerMensagemErro } from "./recuperacao";
 import type { DiaApi } from "./saldo";
 
-// Cliente da API interna (não oficial). Só leitura: nunca registra nem altera ponto.
+// Cliente da API interna (não oficial). Nunca registra nem altera ponto: só consulta dados e, no
+// fluxo "Esqueci minha senha", troca a senha a pedido do próprio funcionário.
 // Nada aqui pode registrar credenciais ou respostas em log.
 
 export type Credenciais = { usuario: string; senha: string; tipo: 0 | 1 };
@@ -69,6 +71,61 @@ function checarStatus(resposta: Response, ehLogin = false): void {
     throw new SecullumError("credenciais", "Usuário ou senha inválidos.");
   }
   throw new SecullumError("api", "A Secullum não aceitou esta consulta.");
+}
+
+/** Fluxo "Esqueci minha senha": sem Authorization, porque o usuário não está logado. */
+async function recuperacao(passo: string, corpo: unknown): Promise<string> {
+  const url = `${baseUrl()}/RecuperacaoSenha/${passo}`;
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, {
+      method: "POST",
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+      headers: {
+        "Content-Type": "application/json",
+        "x-sec-centralfuncionarioversao": process.env.SECULLUM_VERSAO ?? "1.45.0",
+        "Accept-Language": "pt",
+      },
+      body: JSON.stringify(corpo),
+    });
+  } catch {
+    throw new SecullumError("indisponivel", "Não foi possível falar com a Secullum.");
+  }
+  if (resposta.status >= 500 || resposta.status === 429) {
+    throw new SecullumError("indisponivel", "A Secullum está indisponível no momento.");
+  }
+  const texto = await resposta.text().catch(() => "");
+  if (!resposta.ok) {
+    throw new SecullumError("api", lerMensagemErro(texto) ?? "A Secullum não aceitou estes dados. Confira e tente de novo.");
+  }
+  return texto;
+}
+
+type Conta = { usuario: string; tipo: 0 | 1 };
+
+/** Passo 1. Devolve o e-mail mascarado, ou null se o usuário não tiver e-mail cadastrado. */
+export async function obterEmailOculto({ usuario, tipo }: Conta): Promise<string | null> {
+  return lerEmailOculto(await recuperacao("ObterEmailOcultoFuncionario", { usuario, UsuarioAutenticacao: String(tipo) }));
+}
+
+function corpoConta({ usuario, tipo }: Conta) {
+  return { bancoId: process.env.SECULLUM_BANCO, usuario, tipoUsuarioAutenticacao: tipo };
+}
+
+/** Passo 2. Envia de verdade um e-mail ao funcionário. Pede o e-mail completo: o mascarado é recusado. */
+export async function enviarCodigo(conta: Conta, email: string): Promise<void> {
+  await recuperacao("ConfirmarEmail", { ...corpoConta(conta), email });
+}
+
+/** Passo 3. */
+export async function confirmarCodigo(conta: Conta, codigo: string): Promise<void> {
+  await recuperacao("ConfirmarCodigo", { ...corpoConta(conta), codigo });
+}
+
+/** Passo 4. Troca a senha de verdade. */
+export async function trocarSenha(conta: Conta, codigo: string, novaSenha: string): Promise<void> {
+  await recuperacao("TrocarSenha", { ...corpoConta(conta), codigo, novaSenha, confirmarSenha: novaSenha });
 }
 
 export type Perfil = { id: number; nome: string; itensHorario: unknown };

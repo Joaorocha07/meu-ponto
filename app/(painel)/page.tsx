@@ -50,7 +50,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
           <p>
             {resumo ? (
               <>
-                <strong className={classeSaldo(resumo.saldoMinutos)}>{fraseSaldo(resumo.saldoMinutos)}</strong> {mesAtual ? "neste mês" : `em ${periodo.rotulo}`}.
+                <strong className={classeSaldo(resumo.saldoMinutos)}>{fraseSaldo(resumo.saldoMinutos)}</strong> {mesAtual ? "neste período" : `em ${periodo.rotulo}`}.
                 {pendentes.length > 0 && " O saldo ainda pode mudar."}
               </>
             ) : (
@@ -132,7 +132,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
         </>
       )}
 
-      <p className="rodape">App não oficial. O saldo considera o mês-calendário, e o cartão ponto da empresa é o que vale.</p>
+      <p className="rodape">App não oficial. O saldo considera o período do dia 21 ao dia 20, e o cartão ponto da empresa é o que vale.</p>
     </>
   );
 }

@@ -26,17 +26,54 @@ O saldo da API só é confiável depois que o RH processa o dia, então cada dia
 | Situação do dia | Tratamento | Entra na conta? |
 |---|---|---|
 | Processado (`situacao = 0`) | Usa o saldo do servidor | Sim |
-| Não processado e completo | Marcações menos jornada (estimado) | Sim |
+| Não processado, com marcações em número par | Horas trabalhadas menos a jornada do usuário (estimado): negativo se trabalhou menos, positivo se trabalhou mais | Sim |
 | Folga ou feriado | Saldo zero | Sim |
 | Hoje, com marcações faltando | Em andamento | Não |
-| Marcações faltando ou em número ímpar | Incompleto | Não, e gera aviso |
-| Sem marcações, lançamento desconhecido ou jornada duvidosa | A conferir | Não, e gera aviso |
+| Marcações em número ímpar | Incompleto | Não, e gera aviso |
+| Sem marcações, lançamento desconhecido, trabalho em dia sem jornada ou jornada duvidosa | A conferir | Não, e gera aviso |
 
-A regra é não mostrar dívida sem certeza. Por isso, uma falta ainda não processada aparece como aviso, e não como
-horas devidas.
+Um dia sem nenhuma marcação ainda não processado aparece como aviso, e não como horas devidas, porque pode ser falta
+ou registro não lançado.
 
-O significado de `diaSemana` não foi confirmado (assumimos 0 = domingo). O app compara a jornada com os dias já
-processados e, se a maioria divergir, deixa de estimar e marca os dias como "a conferir".
+O significado de `diaSemana` não foi confirmado. `alinharJornada` deduz a numeração pela jornada do usuário: se o item
+0 tem horas e o item 6 não, a lista começa na segunda; nos outros casos, assume 0 = domingo. O app também compara a
+jornada com os dias já processados e, se a maioria divergir, deixa de estimar e marca os dias como "a conferir". A tela
+"Meu perfil" mostra a jornada usada para cada dia, o que permite conferir esse mapeamento.
+
+## Compensação de horas
+
+A tela "Compensação" lista os horários do período escolhido e mostra o saldo do período anterior no topo. O botão
+"Compensar saldo do mês" registra em que dia do período escolhido aquele saldo foi compensado. O servidor busca o saldo na
+Secullum; ele nunca vem do navegador. O registro pode ser desfeito.
+
+Só um saldo com registro entra na conta: positivo abate negativo, meses com o mesmo sinal não se abatem, e o que sobra do
+mês anterior não passa adiante. A conta olha no máximo dois meses para trás.
+
+Os registros ficam na tabela `compensacoes` do Postgres (`DATABASE_URL`), por empresa e funcionário, e só valem neste app:
+a Secullum e o RH não recebem nada. Sem o banco, a tela continua mostrando as horas e só o registro fica indisponível. O
+Painel e o Cartão ponto continuam mostrando o saldo sem compensar.
+
+```sql
+create table compensacoes (
+  banco text not null,
+  funcionario_id integer not null,
+  mes_origem text not null check (mes_origem ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  data_compensacao date not null,
+  minutos integer not null,
+  criado_em timestamptz not null default now(),
+  primary key (banco, funcionario_id, mes_origem)
+);
+```
+
+## Recuperação de senha
+
+A tela `/esqueci-senha` segue os 4 passos da API (`RecuperacaoSenha/*`): confere o usuário e mostra o e-mail mascarado,
+pede o e-mail completo (a API recusa o mascarado) e envia o código, valida o código e troca a senha. **Os passos reais enviam e-mail e trocam a senha de verdade**, então use o mock para
+testar (`npm run mock`, usuário 12345678, e-mail maria@exemplo.com.br, código 123456).
+
+Os formatos de resposta da API são inferidos do front oficial, porque os endpoints nunca foram chamados. Depois da troca,
+o app apaga a sessão e a senha salva daquele usuário neste navegador, para não reenviar a senha antiga. Há um limite em
+memória, por instância: 3 envios de código e 5 e-mails ou códigos errados a cada 15 minutos.
 
 ## Segurança
 
@@ -62,5 +99,5 @@ processados e, se a maioria divergir, deixa de estimar e marca os dias como "a c
 - Respostas de erro reais (senha errada, conta bloqueada).
 - Valores além de `FOLGA` e `Feriado` em `batidas[].valor`, como férias e atestado.
 - Se um `identificacaoDispositivo` novo fica visível para o RH.
-- O período mostrado é o mês-calendário; o fechamento da empresa pode usar outras datas.
+- O período vai do dia 21 ao dia 20 (fechamento da empresa, `DIA_FECHAMENTO` em `lib/periodo.ts`) e leva o nome do mês em que fecha: "novembro" é de 21/10 a 20/11.
 # meu-ponto

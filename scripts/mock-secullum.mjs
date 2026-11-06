@@ -1,8 +1,10 @@
 // Simula a API da Secullum com os exemplos do PDF, para testar sem credenciais reais.
-// Usuário 12345678, senha 1234. Uso: npm run mock
+// Usuário 12345678, senha 1234, código de recuperação 123456. Uso: npm run mock
 import { createServer } from "node:http";
 
-const AUTH_OK = Buffer.from("12345678:1234:0").toString("base64");
+let senhaAtual = "1234";
+const authOk = () => Buffer.from(`12345678:${senhaAtual}:0`).toString("base64");
+const CODIGO = "123456"; // Código de recuperação de senha, que na API real chega por e-mail.
 const util = { entrada1: "08:00", saida1: "11:00", entrada2: "12:00", saida2: "17:00" };
 
 const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -52,6 +54,10 @@ const dia = (data, valores, saldo = "+00:00", situacao = 0, feriado = false) => 
 });
 
 const dias = [
+  // Saldos nos períodos anteriores, para testar os registros de compensação em sequência.
+  dia("2026-09-15", ["08:00", "11:00", "12:00", "16:00"], "-01:00"),
+  dia("2026-10-13", ["08:00", "11:00", "12:00", "20:00"], "+03:00"),
+  dia("2026-10-15", ["08:00", "11:00", "12:00", "19:30"], "+02:30"),
   dia("2026-10-22", ["08:24", "11:44", "12:44", "17:47"], "+00:23"),
   dia("2026-10-24", ["FOLGA", "FOLGA", "FOLGA", "FOLGA"]),
   dia("2026-10-28", ["08:34", "11:55", "12:57", "18:30"], "+00:54"),
@@ -72,6 +78,29 @@ const json = (res, status, corpo) => {
 // se a senha tivesse mudado; /__falha/nenhuma volta ao normal.
 let falha = "nenhuma";
 
+// Os formatos de resposta são inferidos: os endpoints reais nunca foram chamados.
+async function recuperacao(req, res, passo) {
+  let texto = "";
+  for await (const parte of req) texto += parte;
+  const corpo = JSON.parse(texto || "{}");
+  console.log("RecuperacaoSenha", passo, "autorizacao:", req.headers.authorization ?? "nenhuma");
+  if (corpo.usuario === "semmail") return json(res, 200, "");
+  if (corpo.usuario !== "12345678") return json(res, 400, { usuario: "Usuário não encontrado." });
+  if (passo === "ObterEmailOcultoFuncionario") return json(res, 200, "ma***@exemplo.com.br");
+  if (passo === "ConfirmarEmail") {
+    // Como na API real, que recusa o e-mail mascarado com esta mesma mensagem.
+    return corpo.email === perfil.email ? json(res, 200, {}) : json(res, 400, { email: "Informe o email corretamente." });
+  }
+  if (corpo.codigo !== CODIGO) return json(res, 400, { codigo: "Código inválido." });
+  if (passo === "ConfirmarCodigo") return json(res, 200, {});
+  if (passo === "TrocarSenha") {
+    if (corpo.novaSenha !== corpo.confirmarSenha) return json(res, 400, { confirmarSenha: "As senhas não conferem." });
+    senhaAtual = corpo.novaSenha;
+    return json(res, 200, {});
+  }
+  return json(res, 404, {});
+}
+
 createServer((req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
   console.log(req.method, pathname);
@@ -79,7 +108,8 @@ createServer((req, res) => {
     falha = pathname.split("/").pop();
     return json(res, 200, { falha });
   }
-  if (req.headers.authorization !== `Basic ${AUTH_OK}` || falha === "senha") return json(res, 401, {});
+  if (pathname.includes("/RecuperacaoSenha/")) return recuperacao(req, res, pathname.split("/").pop());
+  if (req.headers.authorization !== `Basic ${authOk()}` || falha === "senha") return json(res, 401, {});
   if (req.method === "POST" && pathname.endsWith("/Login")) return json(res, 200, perfil);
   if (pathname.endsWith("/Funcionarios/DadosAdicionais/1")) {
     return falha === "adicionais" ? json(res, 404, {}) : json(res, 200, adicionais);

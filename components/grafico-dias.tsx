@@ -1,5 +1,5 @@
 import { partesData } from "@/lib/periodo";
-import { formatarSaldo, type DiaCalculado } from "@/lib/saldo";
+import { formatarSaldo, formatarSaldoCurto, type DiaCalculado } from "@/lib/saldo";
 
 /**
  * Barras divergentes: a posição e o sinal indicam a polaridade, sem depender de cor.
@@ -12,11 +12,10 @@ export function GraficoDias({ dias }: { dias: DiaCalculado[] }) {
       {dias.map((dia) => {
         const { semana, data } = partesData(dia.data);
         const saldo = dia.saldoMinutos;
-        const texto = saldo === null ? "—" : formatarSaldo(saldo);
         const altura = saldo ? `max(6px, ${(Math.abs(saldo) / maior) * 100}%)` : "0";
         return (
-          <div className="bar" key={dia.data} title={`${semana}, ${data}: ${saldo === null ? "sem saldo" : texto}`}>
-            <b>{texto}</b>
+          <div className="bar" key={dia.data} title={`${semana}, ${data}: ${saldo === null ? "sem saldo" : formatarSaldo(saldo)}`}>
+            <b>{saldo === null ? "—" : formatarSaldoCurto(saldo)}</b>
             <div className="bar-area" aria-hidden="true">
               <div className="bar-metade cima">{saldo !== null && saldo > 0 && <i style={{ height: altura }} />}</div>
               <div className="bar-metade baixo">{saldo !== null && saldo < 0 && <i style={{ height: altura }} />}</div>

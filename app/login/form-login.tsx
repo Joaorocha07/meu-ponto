@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Eye, EyeOff, Lock, User } from "lucide-react";
+import Link from "next/link";
 import { useActionState, useState, type FormEvent } from "react";
 import { entrar, type EstadoLogin } from "../acoes";
 
@@ -89,6 +90,8 @@ export function FormLogin({ salvo }: { salvo: { usuario: string; tipo: 0 | 1 } |
       <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={enviando}>
         {enviando ? <span className="spinner" aria-label="Entrando" /> : <>Entrar <ArrowRight size={17} aria-hidden="true" /></>}
       </button>
+
+      <Link className="link-esquecer" href="/esqueci-senha">Esqueci minha senha</Link>
 
       {estado.salvoPara && (
         <button type="submit" className="link-esquecer" name="acao" value="esquecer" formNoValidate>

@@ -9,7 +9,7 @@ export function SeletorMes({ periodo, caminho }: { periodo: Periodo; caminho: st
       <Link className="mes-anterior" href={`${caminho}?mes=${periodo.anterior}`}>
         <ChevronLeft size={16} aria-hidden="true" />{nomeMes(periodo.anterior)}
       </Link>
-      <span className="on" aria-current="date">{periodo.rotulo}</span>
+      <span className="on" aria-current="date">{periodo.rotulo} · {periodo.intervalo}</span>
       {periodo.proximo && (
         <Link className="mes-proximo" href={`${caminho}?mes=${periodo.proximo}`}>
           {nomeMes(periodo.proximo)}<ChevronRight size={16} aria-hidden="true" />

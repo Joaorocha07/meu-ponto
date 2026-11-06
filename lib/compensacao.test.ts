@@ -53,6 +53,10 @@ describe("diasComSaldo", () => {
     saldoMinutos,
     trabalhadoMinutos: null,
     motivo: null,
+    avisos: [],
+    justificativa: null,
+    previsaoSaida: null,
+    batidas: [],
   });
 
   it("mantém só os dias que entram no saldo, do mais antigo ao mais recente", () => {

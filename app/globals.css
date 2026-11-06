@@ -16,6 +16,12 @@
   --negativo: #c4281c;
   --positivo: #12803f;
   --neutro: var(--muted);
+  --folga-linha: #f1f7fe;
+  --folga-selo: #dcebfb;
+  --folga-texto: #1d4f91;
+  --feriado-linha: #fef8ea;
+  --feriado-selo: #fbeac4;
+  --feriado-texto: #7a4a00;
   --welcome-negativo: #ff9a90;
   --welcome-positivo: #6fdc9f;
   --sidebar: #0a0a0a;
@@ -48,6 +54,12 @@
   --on-primary: #0a0a0a;
   --negativo: #ff8f85;
   --positivo: #62d594;
+  --folga-linha: #101b28;
+  --folga-selo: #1b3048;
+  --folga-texto: #a9cdf5;
+  --feriado-linha: #211a0c;
+  --feriado-selo: #3a2c10;
+  --feriado-texto: #f2cc7e;
   --welcome-negativo: #c4281c;
   --welcome-positivo: #12803f;
   --sidebar: #000000;
@@ -185,6 +197,8 @@ small { font-size: 12px; color: var(--muted); }
 .badge.solid { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .badge.soft { background: var(--surface-2); border-color: var(--surface-2); }
 .badge.dashed { border-style: dashed; color: var(--muted); }
+.badge.selo-folga { background: var(--folga-selo); border-color: var(--folga-selo); color: var(--folga-texto); }
+.badge.selo-feriado { background: var(--feriado-selo); border-color: var(--feriado-selo); color: var(--feriado-texto); }
 
 .avatar {
   flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
@@ -312,9 +326,18 @@ small { font-size: 12px; color: var(--muted); }
 .table th { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 12px 24px; background: var(--surface-2); white-space: nowrap; }
 .table td { padding: 16px 24px; border-top: 1px solid var(--line); vertical-align: middle; }
 .table .numero { text-align: right; }
+.table tr.linha-folga { background: var(--folga-linha); }
+.table tr.linha-feriado { background: var(--feriado-linha); }
 .celula-data { font-weight: 600; white-space: nowrap; }
 .celula-marcas { color: var(--muted); font-variant-numeric: tabular-nums; }
 .celula-marcas small { display: block; }
+.aviso-dia { color: var(--ink); font-weight: 600; }
+.batidas-detalhe { margin-top: 6px; font-size: 13px; }
+.batidas-detalhe summary { cursor: pointer; width: fit-content; }
+.batidas-detalhe summary b { margin-left: 6px; color: var(--ink); }
+.batidas-detalhe ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.batidas-detalhe li strong { color: var(--ink); }
+.batidas-detalhe li small { display: block; }
 .celula-saldo { font-family: var(--display); font-weight: 800; font-variant-numeric: tabular-nums; }
 .dia-compensado { margin-top: 4px; color: var(--ink); font-weight: 600; }
 .compensar-mes { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin-bottom: 20px; }

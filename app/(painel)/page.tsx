@@ -5,8 +5,8 @@ import { GraficoDias } from "@/components/grafico-dias";
 import { IconeBoasVindas } from "@/components/marca";
 import { SeletorMes } from "@/components/seletor-mes";
 import { carregarMes, CLASSE_STATUS, ROTULO_STATUS } from "@/lib/dados";
-import { partesData, saudacao } from "@/lib/periodo";
-import { classeSaldo, formatarDuracao, formatarSaldo, type Resumo } from "@/lib/saldo";
+import { hojeIso, partesData, saudacao } from "@/lib/periodo";
+import { classeSaldo, formatarDuracao, formatarSaldo, metaParaZerar, type Resumo } from "@/lib/saldo";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +31,11 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
     .slice(0, 7)
     .reverse();
 
+  // Previsão e meta só fazem sentido no período em andamento.
+  const hoje = hojeIso();
+  const diaDeHoje = mesAtual ? resumo?.dias.find((d) => d.data === hoje) : undefined;
+  const meta = mesAtual && resumo ? metaParaZerar(resumo, sessao.jornada, hoje, periodo.fechamento) : null;
+
   const metricas: { rotulo: string; valor: string; dica: string; Icone: ComponentType<{ size?: number }>; classe?: string }[] = resumo
     ? [
         { rotulo: "Saldo do mês", valor: formatarSaldo(resumo.saldoMinutos), dica: detalheSaldo(resumo), Icone: Scale, classe: classeSaldo(resumo.saldoMinutos) },
@@ -52,6 +57,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
               <>
                 <strong className={classeSaldo(resumo.saldoMinutos)}>{fraseSaldo(resumo.saldoMinutos)}</strong> {mesAtual ? "neste período" : `em ${periodo.rotulo}`}.
                 {pendentes.length > 0 && " O saldo ainda pode mudar."}
+                {meta && ` Para zerar até ${partesData(periodo.fechamento).data}, trabalhe +${formatarDuracao(meta.minutosPorDia)} por dia ${meta.dias === 1 ? "no último dia útil" : `nos ${meta.dias} dias úteis restantes`}, sem contar feriados.`}
               </>
             ) : (
               `${erro} Tente novamente em instantes.`
@@ -62,6 +68,16 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
       </section>
 
       <SeletorMes periodo={periodo} caminho="/" />
+
+      {diaDeHoje?.previsaoSaida && (
+        <div className="card convite" role="status">
+          <span className="metric-icon"><Clock size={18} aria-hidden="true" /></span>
+          <div>
+            <strong>{diaDeHoje.motivo}</strong>
+            <small>Estimativa pela sua jornada de hoje. Tolerâncias e o processamento do RH podem mudar o resultado.</small>
+          </div>
+        </div>
+      )}
 
       {resumo && pendentes.length > 0 && (
         <div className="card convite" role="status">

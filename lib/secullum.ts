@@ -186,22 +186,46 @@ function validarLista(lista: unknown): DiaApi[] {
         d.batidas.every((b: { nome?: unknown; valor?: unknown }) => typeof b?.nome === "string" && "valor" in b),
     );
   if (!valido) throw new SecullumError("formato", "O formato do cartão ponto mudou.");
-  // Mantém só o necessário: geolocalização e nome do funcionário não seguem adiante.
+  // Mantém só o necessário: o nome do funcionário e outros campos não seguem adiante. A localização
+  // só aparece para o próprio funcionário, no cartão ponto.
   return (lista as DiaApi[]).map((d) => ({
     data: d.data,
-    batidas: d.batidas.map((b) => ({ nome: b.nome, valor: b.valor })),
+    batidas: d.batidas.map((b) => ({
+      nome: b.nome,
+      valor: b.valor,
+      valorOriginal: b.valorOriginal,
+      ehRepP: b.ehRepP,
+      geolocalizacao: b.geolocalizacao,
+    })),
     saldo: d.saldo,
     situacao: d.situacao,
     feriado: d.feriado,
+    registroPendente: d.registroPendente === true,
   }));
+}
+
+/** A API manda todos os códigos possíveis, não os do dia: serve para explicar um código como ABONO. */
+function nomesJustificativas(lista: unknown): Map<string, string> {
+  const nomes = new Map<string, string>();
+  if (!Array.isArray(lista)) return nomes;
+  for (const item of lista as { nomeAbreviado?: unknown; nomeCompleto?: unknown }[]) {
+    if (typeof item?.nomeAbreviado === "string" && typeof item.nomeCompleto === "string") {
+      nomes.set(item.nomeAbreviado.trim().toUpperCase(), item.nomeCompleto.trim());
+    }
+  }
+  return nomes;
 }
 
 export async function buscarBatidas(cred: Credenciais, inicio: string, fim: string): Promise<DiaApi[]> {
   const resposta = await chamar(`/Batidas/${inicio}/${fim}`, cred);
   checarStatus(resposta);
-  const corpo = (await lerJson(resposta)) as { erros?: unknown; lista?: unknown } | null;
+  const corpo = (await lerJson(resposta)) as { erros?: unknown; lista?: unknown; justificativas?: unknown } | null;
   if (Array.isArray(corpo?.erros) && corpo.erros.length > 0) {
     throw new SecullumError("api", "A Secullum informou erro neste período. Confira no site oficial.");
   }
-  return validarLista(corpo?.lista);
+  const nomes = nomesJustificativas(corpo?.justificativas);
+  return validarLista(corpo?.lista).map((dia) => ({
+    ...dia,
+    justificativa: dia.batidas.map((b) => nomes.get((b.valor ?? "").trim().toUpperCase())).find(Boolean) ?? null,
+  }));
 }

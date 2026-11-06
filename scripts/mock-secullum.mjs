@@ -34,23 +34,33 @@ const perfil = {
   dadosHorario: {
     itens: [0, 1, 2, 3, 4, 5, 6].map((diaSemana) => ({
       diaSemana,
+      toleranciaExtra: 5,
+      toleranciaFalta: 5,
       ...(diaSemana >= 1 && diaSemana <= 5 ? util : {}),
     })),
   },
 };
 
-const dia = (data, valores, saldo = "+00:00", situacao = 0, feriado = false) => ({
+const EMPRESA = { latitude: -18.9186, longitude: -48.2772, precisao: 12, endereco: "Rua 02, Uberlândia" };
+const hojeLocal = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+
+const dia = (data, valores, saldo = "+00:00", situacao = 0, feriado = false, extra = {}) => ({
   data: `${data}T00:00:00`,
   funcionarioNome: perfil.nome,
   batidas: valores.map((valor, i) => ({
     nome: `${i % 2 ? "Saída" : "Entrada"} ${Math.floor(i / 2) + 1}`,
     valor,
-    valorOriginal: valor,
-    geolocalizacao: { latitude: 0, longitude: 0 },
+    valorOriginal: valor || null,
+    ehRepP: /^\d\d:\d\d$/.test(valor),
+    geolocalizacao: /^\d\d:\d\d$/.test(valor)
+      ? { ...EMPRESA, dataHora: `${data}T${valor}:35` }
+      : { latitude: 0, longitude: 0 },
+    ...extra[i],
   })),
   saldo,
   situacao,
   feriado,
+  registroPendente: extra.registroPendente === true,
 });
 
 const dias = [
@@ -64,8 +74,23 @@ const dias = [
   dia("2026-10-30", ["08:19", "12:09", "", ""], "+00:00", 1),
   dia("2026-11-02", ["Feriado", "Feriado", "Feriado", "Feriado"], "+00:00", 0, true),
   dia("2026-11-03", ["ATESTADO", "ATESTADO", "", ""], "+00:00", 1),
-  dia("2026-11-04", ["08:47", "12:27", "13:27", "16:53"], "+00:00", 1),
-  dia("2026-11-05", ["08:02", "12:00", "", ""], "+00:00", 1),
+  // Entrada 2 sem marcação original nem registro REP-P, e Saída 2 alterada.
+  dia("2026-11-04", ["08:47", "12:27", "13:27", "16:53"], "+00:00", 1, false, {
+    2: { valorOriginal: null, ehRepP: false },
+    3: { valorOriginal: "16:40" },
+  }),
+  // Marcada longe do local das outras.
+  dia("2026-11-05", ["08:02", "12:00", "", ""], "+00:00", 1, false, {
+    registroPendente: true,
+    1: { geolocalizacao: { latitude: -18.8, longitude: -48.1, precisao: 10, endereco: "Av. Longe, Uberlândia", dataHora: "2026-11-05T12:00:12" } },
+  }),
+  // Hoje, com a última saída pendente, para a previsão de saída.
+  ...(hojeLocal > "2026-11-05" ? [dia(hojeLocal, ["08:00", "11:00", "12:04", "", "", ""], "+00:00", 1)] : []),
+];
+
+const justificativas = [
+  { nomeAbreviado: "ABONO", nomeCompleto: "Abono concedido" },
+  { nomeAbreviado: "ATESTADO", nomeCompleto: "Atestado médico" },
 ];
 
 const json = (res, status, corpo) => {
@@ -120,7 +145,7 @@ createServer((req, res) => {
   const m = pathname.match(/\/Batidas\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})$/);
   if (m) {
     const lista = dias.filter((d) => d.data.slice(0, 10) >= m[1] && d.data.slice(0, 10) <= m[2]);
-    return json(res, 200, { erros: [], totais: [], lista });
+    return json(res, 200, { erros: [], totais: [], lista, justificativas });
   }
   return json(res, 404, {});
 }).listen(4010, () => console.log("Mock da Secullum em http://localhost:4010"));

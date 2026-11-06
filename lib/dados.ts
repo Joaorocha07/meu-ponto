@@ -21,8 +21,8 @@ export const ROTULO_STATUS: Record<StatusDia, string> = {
 export const CLASSE_STATUS: Record<StatusDia, string> = {
   confirmado: "",
   estimado: "dashed",
-  folga: "soft plain",
-  feriado: "soft plain",
+  folga: "plain selo-folga",
+  feriado: "plain selo-feriado",
   em_andamento: "dashed",
   incompleto: "solid",
   a_conferir: "solid",

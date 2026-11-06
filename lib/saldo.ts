@@ -1,16 +1,20 @@
 // Regras de cálculo do saldo. Módulo puro (sem rede nem segredos) para poder ser testado.
+import { detalharBatidas, marcarForaDoHabitual, type BatidaBruta, type BatidaDetalhe } from "./batidas";
 
-export type JornadaDia = { minutos: number; marcacoes: number };
+export type JornadaDia = { minutos: number; marcacoes: number; toleranciaExtra?: number; toleranciaFalta?: number };
 /** Chave: diaSemana da Secullum. Hipótese: 0 = domingo ... 6 = sábado (ver `jornadaConfiavel`). */
 export type Jornada = Record<string, JornadaDia>;
 
-export type BatidaApi = { nome: string; valor: string | null };
+export type BatidaApi = BatidaBruta;
 export type DiaApi = {
   data: string;
   batidas: BatidaApi[];
   saldo?: string | null;
   situacao?: number;
   feriado?: boolean;
+  registroPendente?: boolean;
+  /** Nome completo do código do dia, como ABONO, vindo da lista de justificativas da API. */
+  justificativa?: string | null;
 };
 
 export type StatusDia =
@@ -30,6 +34,12 @@ export type DiaCalculado = {
   saldoMinutos: number | null;
   trabalhadoMinutos: number | null;
   motivo: string | null;
+  /** Alertas que não mudam a conta, como menos marcações do que a jornada prevê. */
+  avisos: string[];
+  justificativa: string | null;
+  /** Hoje: a que horas sair para fechar a jornada. Ex.: 17:04. */
+  previsaoSaida: string | null;
+  batidas: BatidaDetalhe[];
 };
 
 export type Resumo = {
@@ -40,6 +50,8 @@ export type Resumo = {
   trabalhadoMinutos: number;
   contabilizados: number;
   pendentes: number;
+  /** A jornada lida combina com os dias já processados. */
+  jornadaOk: boolean;
 };
 
 const HHMM = /^\d{2}:\d{2}$/;
@@ -51,6 +63,12 @@ const paraMinutos = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
 };
+
+const paraHorario = (minutos: number) =>
+  `${String(Math.floor(minutos / 60)).padStart(2, "0")}:${String(minutos % 60).padStart(2, "0")}`;
+
+/** Hipótese do PDF: tolerância em minutos. Fora desta faixa, o valor é ignorado por parecer outra coisa. */
+const toleranciaValida = (valor: unknown) => (typeof valor === "number" && Number.isInteger(valor) && valor > 0 && valor <= 60 ? valor : null);
 
 export function parseSaldo(valor: string | null | undefined): number | null {
   const m = SALDO.exec((valor ?? "").trim());
@@ -89,7 +107,14 @@ export function extrairJornada(itens: unknown): Jornada | null {
     }
     const minutos = minutosTrabalhados(marcas);
     if (minutos === null) return null;
-    jornada[item.diaSemana] = { minutos, marcacoes: marcas.length };
+    const toleranciaExtra = toleranciaValida(item.toleranciaExtra);
+    const toleranciaFalta = toleranciaValida(item.toleranciaFalta);
+    jornada[item.diaSemana] = {
+      minutos,
+      marcacoes: marcas.length,
+      ...(toleranciaExtra && { toleranciaExtra }),
+      ...(toleranciaFalta && { toleranciaFalta }),
+    };
   }
   return jornada;
 }
@@ -139,11 +164,42 @@ export function jornadaConfiavel(jornada: Jornada | null, dias: DiaApi[]): boole
   return evidencias === 0 || divergencias * 2 < evidencias;
 }
 
+/** Diferença dentro da tolerância da jornada não conta como saldo. */
+function aplicarTolerancia(saldo: number, jornada: JornadaDia): number {
+  if (saldo > 0 && saldo <= (jornada.toleranciaExtra ?? 0)) return 0;
+  if (saldo < 0 && -saldo <= (jornada.toleranciaFalta ?? 0)) return 0;
+  return saldo;
+}
+
+/** Só com a última saída pendente: antes dela, ainda falta um intervalo que não dá para prever. */
+function preverSaida(marcacoes: string[], esperado: JornadaDia | null): string | null {
+  if (!esperado?.minutos || marcacoes.length % 2 === 0 || marcacoes.length !== esperado.marcacoes - 1) return null;
+  const fechados = minutosTrabalhados(marcacoes.slice(0, -1));
+  if (fechados === null || fechados >= esperado.minutos) return null;
+  const saida = paraMinutos(marcacoes[marcacoes.length - 1]) + esperado.minutos - fechados;
+  return saida < 24 * 60 ? paraHorario(saida) : null;
+}
+
 function classificar(dia: DiaApi, jornada: Jornada | null, confiavel: boolean, hoje: string): DiaCalculado {
   const data = dataIso(dia);
   const marcacoes = marcacoesDe(dia);
   const rotulo = rotuloDe(dia);
-  const base = { data, marcacoes, rotulo, trabalhadoMinutos: minutosTrabalhados(marcacoes) };
+  const previsto = jornada?.[diaDaSemana(data)] ?? null;
+  const avisos: string[] = [];
+  if (dia.registroPendente) avisos.push("Registro pendente na Secullum");
+  if (data !== hoje && previsto && marcacoes.length > 0 && marcacoes.length % 2 === 0 && marcacoes.length < previsto.marcacoes) {
+    avisos.push(`${marcacoes.length} de ${previsto.marcacoes} marcações previstas`);
+  }
+  const base = {
+    data,
+    marcacoes,
+    rotulo,
+    trabalhadoMinutos: minutosTrabalhados(marcacoes),
+    avisos,
+    justificativa: dia.justificativa ?? null,
+    previsaoSaida: null,
+    batidas: detalharBatidas(dia.batidas),
+  };
   const r = (status: StatusDia, saldoMinutos: number | null, motivo: string | null = null): DiaCalculado => ({
     ...base,
     status,
@@ -161,7 +217,9 @@ function classificar(dia: DiaApi, jornada: Jornada | null, confiavel: boolean, h
   const trabalhado = minutosTrabalhados(marcacoes);
 
   if (data === hoje && (faltamMarcacoes || !esperado || marcacoes.length % 2 !== 0)) {
-    return r("em_andamento", null, "Dia em andamento");
+    const previsaoSaida = confiavel ? preverSaida(marcacoes, esperado) : null;
+    const motivo = previsaoSaida && esperado ? `Para fechar ${formatarDuracao(esperado.minutos)}, saia às ${previsaoSaida}` : "Dia em andamento";
+    return { ...r("em_andamento", null, motivo), previsaoSaida };
   }
   if (marcacoes.length % 2 !== 0) return r("incompleto", null, "Número ímpar de marcações");
 
@@ -183,7 +241,7 @@ function classificar(dia: DiaApi, jornada: Jornada | null, confiavel: boolean, h
     return r("a_conferir", null, "Jornada do dia não pôde ser confirmada");
   }
   if (trabalhado === null) return r("a_conferir", null, "Marcações fora de ordem");
-  return r("estimado", trabalhado - esperado.minutos, "Aguardando processamento do RH");
+  return r("estimado", aplicarTolerancia(trabalhado - esperado.minutos, esperado), "Aguardando processamento do RH");
 }
 
 export function calcularResumo(lista: DiaApi[], jornadaApi: Jornada | null, hoje: string): Resumo {
@@ -193,6 +251,7 @@ export function calcularResumo(lista: DiaApi[], jornadaApi: Jornada | null, hoje
   const dias = passados
     .map((d) => classificar(d, jornada, confiavel, hoje))
     .sort((a, b) => b.data.localeCompare(a.data));
+  marcarForaDoHabitual(dias.flatMap((d) => d.batidas));
 
   const somar = (status: StatusDia) =>
     dias.filter((d) => d.status === status).reduce((soma, d) => soma + (d.saldoMinutos ?? 0), 0);
@@ -208,7 +267,29 @@ export function calcularResumo(lista: DiaApi[], jornadaApi: Jornada | null, hoje
     trabalhadoMinutos: contabilizadosDias.reduce((soma, d) => soma + (d.trabalhadoMinutos ?? 0), 0),
     contabilizados: contabilizadosDias.length,
     pendentes: dias.filter((d) => d.status === "incompleto" || d.status === "a_conferir").length,
+    jornadaOk: confiavel,
   };
+}
+
+export type MetaZerar = { dias: number; minutosPorDia: number };
+
+/**
+ * Quanto trabalhar a mais por dia para zerar um saldo negativo até o fechamento. Conta os dias com
+ * jornada, incluindo hoje se ele ainda não entrou no saldo. A API não informa feriados futuros.
+ */
+export function metaParaZerar(resumo: Resumo, jornadaApi: Jornada | null, hoje: string, fechamento: string): MetaZerar | null {
+  const jornada = alinharJornada(jornadaApi);
+  if (resumo.saldoMinutos >= 0 || !resumo.jornadaOk || !jornada) return null;
+  const registroHoje = resumo.dias.find((d) => d.data === hoje);
+  const contaHoje = !registroHoje || registroHoje.status === "em_andamento";
+  let dias = 0;
+  const [a, m, d] = hoje.split("-").map(Number);
+  for (let i = contaHoje ? 0 : 1; ; i++) {
+    const iso = new Date(Date.UTC(a, m - 1, d + i)).toISOString().slice(0, 10);
+    if (iso > fechamento) break;
+    if (jornada[diaDaSemana(iso)]?.minutos) dias++;
+  }
+  return dias === 0 ? null : { dias, minutosPorDia: Math.ceil(-resumo.saldoMinutos / dias) };
 }
 
 /** Classe de cor do saldo: vermelho se negativo, verde se positivo, cinza se neutro ou sem saldo. */

@@ -104,8 +104,11 @@ export default async function Perfil() {
                 <div className="card-head"><div><h2>Jornada usada no cálculo</h2><p>Como o app leu seu horário. Se um dia estiver errado, as estimativas dele não valem.</p></div></div>
                 <dl className="dados">
                   {DIAS_SEMANA.map(([indice, rotulo]) => {
-                    const minutos = jornada[indice]?.minutos;
-                    return <Linha key={indice} rotulo={rotulo}>{minutos ? formatarDuracao(minutos) : "Sem jornada"}</Linha>;
+                    const dia = jornada[indice];
+                    const tolerancia = dia?.toleranciaExtra || dia?.toleranciaFalta
+                      ? ` · tolerância: ${dia.toleranciaExtra ?? 0} min a mais, ${dia.toleranciaFalta ?? 0} min a menos`
+                      : "";
+                    return <Linha key={indice} rotulo={rotulo}>{dia?.minutos ? `${formatarDuracao(dia.minutos)}${tolerancia}` : "Sem jornada"}</Linha>;
                   })}
                 </dl>
               </>

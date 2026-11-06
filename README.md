@@ -40,6 +40,20 @@ O significado de `diaSemana` não foi confirmado. `alinharJornada` deduz a numer
 jornada com os dias já processados e, se a maioria divergir, deixa de estimar e marca os dias como "a conferir". A tela
 "Meu perfil" mostra a jornada usada para cada dia, o que permite conferir esse mapeamento.
 
+## Detalhes das marcações
+
+Os campos abaixo vêm do PDF da API e ainda precisam ser conferidos com dados reais (`lib/batidas.ts`):
+
+- **Ajuste:** se `valorOriginal` difere de `valor`, o dia mostra a alteração. O app não afirma quem alterou.
+- **Origem:** `ehRepP: false` em uma marcação aparece como "sem registro REP-P".
+- **Local habitual:** não existe local cadastrado na API, então o app compara com onde a maioria das marcações do período
+  foi feita (raio de 300 m, alerta acima de 500 m). Com menos de 6 marcações com local, ou sem maioria, nada é marcado.
+- **Tolerância:** `toleranciaExtra` e `toleranciaFalta` são tratadas como minutos por dia e zeram só a estimativa dentro
+  do limite. A regra exata da Secullum não é conhecida, e valores fora de 1 a 60 são ignorados. Elas só valem após um novo
+  login, e a tela "Meu perfil" mostra o que foi lido.
+- **Justificativas:** a lista da API traz todos os códigos possíveis. O app só a usa para explicar um código que aparece
+  nas marcações do dia, como ABONO.
+
 ## Compensação de horas
 
 A tela "Compensação" lista os horários do período escolhido e mostra o saldo do período anterior no topo. O botão
@@ -86,8 +100,9 @@ memória, por instância: 3 envios de código e 5 e-mails ou códigos errados a 
 - **`SESSION_SECRET`:** quem tiver essa chave e um cookie consegue ler a senha daquela pessoa. Guarde-a como segredo.
 - **Dados pessoais:** o cookie guarda só o necessário para consultar (credenciais, primeiro nome, id e jornada). A tela
   "Meu perfil" mostra ao próprio funcionário nome, função, contatos, nascimento, foto e o CPF mascarado. CPF completo,
-  RG, filiação, comprovante de endereço, IP de login e geolocalização não saem do servidor. A lista de campos fica em
-  `lib/perfil.ts`.
+  RG, filiação, comprovante de endereço e IP de login não saem do servidor. A lista de campos fica em `lib/perfil.ts`.
+- **Local das marcações:** o Cartão ponto mostra ao próprio funcionário o endereço de cada marcação, sem mapa embutido. As
+  coordenadas só vão ao Google Maps se a pessoa clicar em "Ver no mapa", e nada disso é salvo no app.
 - **Logs:** nunca registre as requisições enviadas à Secullum, porque o header `Authorization` equivale à senha.
 - **HTTPS:** obrigatório em produção; o cookie de sessão só trafega nele.
 - **Bloqueio de conta:** depois de 5 senhas erradas, o usuário espera 15 minutos. O limite fica em memória, por

@@ -7,6 +7,7 @@ import {
   formatarSaldo,
   formatarSaldoCurto,
   jornadaConfiavel,
+  metaParaZerar,
   parseSaldo,
   type DiaApi,
   type Jornada,
@@ -266,5 +267,75 @@ describe("formatos", () => {
     expect(formatarSaldoCurto(65)).toBe("+1h05");
     expect(formatarSaldoCurto(-480)).toBe("−8h");
     expect(formatarSaldoCurto(0)).toBe("0min");
+  });
+});
+
+describe("melhorias do cálculo", () => {
+  const SEXTA = "2026-11-06";
+
+  it("prevê a saída quando só falta a última marcação", () => {
+    const r = calcularResumo([dia(SEXTA, ["08:00", "11:00", "12:04"], { situacao: 1 })], jornada, SEXTA);
+    expect(r.dias[0]).toMatchObject({ status: "em_andamento", previsaoSaida: "17:04", motivo: "Para fechar 8h, saia às 17:04" });
+  });
+
+  it("não prevê a saída antes do intervalo, que ainda não dá para saber", () => {
+    const r = calcularResumo([dia(SEXTA, ["08:00"], { situacao: 1 })], jornada, SEXTA);
+    expect(r.dias[0]).toMatchObject({ status: "em_andamento", previsaoSaida: null, motivo: "Dia em andamento" });
+  });
+
+  it("zera a estimativa dentro da tolerância, e só nela", () => {
+    const comTolerancia = extrairJornada(itens.map((i) => ({ ...i, toleranciaExtra: 5, toleranciaFalta: 10 }))) as Jornada;
+    const saldo = (marcas: string[]) =>
+      calcularResumo([dia("2026-11-04", marcas, { situacao: 1 })], comTolerancia, HOJE).dias[0].saldoMinutos;
+    expect(saldo(["08:00", "11:00", "12:00", "17:05"])).toBe(0);
+    expect(saldo(["08:00", "11:00", "12:00", "17:06"])).toBe(6);
+    expect(saldo(["08:00", "11:00", "12:00", "16:50"])).toBe(0);
+    expect(saldo(["08:00", "11:00", "12:00", "16:49"])).toBe(-11);
+  });
+
+  it("ignora tolerância que não parece estar em minutos", () => {
+    const estranha = extrairJornada(itens.map((i) => ({ ...i, toleranciaExtra: 480, toleranciaFalta: -5 }))) as Jornada;
+    expect(estranha[3]).toEqual({ minutos: 480, marcacoes: 4 });
+  });
+
+  it("avisa quantas marcações o dia teve, sem tirar o dia da conta", () => {
+    const r = calcularResumo([dia("2026-10-30", ["08:19", "12:09", "", ""], { situacao: 1 })], jornada, HOJE);
+    expect(r.dias[0]).toMatchObject({ status: "estimado", saldoMinutos: -250, avisos: ["2 de 4 marcações previstas"] });
+    expect(r.pendentes).toBe(0);
+  });
+
+  it("avisa registro pendente", () => {
+    const r = calcularResumo([dia("2026-11-04", ["08:00", "11:00", "12:00", "17:00"], { registroPendente: true })], jornada, HOJE);
+    expect(r.dias[0].avisos).toEqual(["Registro pendente na Secullum"]);
+  });
+
+  describe("metaParaZerar", () => {
+    const devendo = (hoje: string, lista: DiaApi[]) => calcularResumo(lista, jornada, hoje);
+
+    it("divide o saldo negativo pelos dias com jornada até o fechamento, arredondando para cima", () => {
+      // Seg 16/11 a sex 20/11, com hoje fora do saldo: 5 dias.
+      const r = devendo("2026-11-16", [dia("2026-11-13", ["08:00", "11:00", "12:00", "16:00"], { saldo: "-01:03" })]);
+      expect(metaParaZerar(r, jornada, "2026-11-16", "2026-11-20")).toEqual({ dias: 5, minutosPorDia: 13 });
+    });
+
+    it("não conta hoje se ele já entrou no saldo", () => {
+      const r = devendo("2026-11-16", [dia("2026-11-16", ["08:00", "11:00", "12:00", "16:00"], { saldo: "-01:00" })]);
+      expect(metaParaZerar(r, jornada, "2026-11-16", "2026-11-20")).toEqual({ dias: 4, minutosPorDia: 15 });
+    });
+
+    it("não conta sábado e domingo", () => {
+      // Sex 13/11 a sex 20/11, sem o fim de semana: 6 dias.
+      const r = devendo("2026-11-13", [dia("2026-11-12", ["08:00", "11:00", "12:00", "16:00"], { saldo: "-01:00" })]);
+      expect(metaParaZerar(r, jornada, "2026-11-13", "2026-11-20")?.dias).toBe(6);
+    });
+
+    it("não tem meta com saldo positivo, sem dias restantes ou com jornada duvidosa", () => {
+      const positivo = devendo(HOJE, [dia("2026-11-04", ["08:00", "11:00", "12:00", "18:00"], { saldo: "+01:00" })]);
+      expect(metaParaZerar(positivo, jornada, HOJE, "2026-11-20")).toBeNull();
+      const noFim = devendo("2026-11-20", [dia("2026-11-20", ["08:00", "11:00", "12:00", "16:00"], { saldo: "-01:00" })]);
+      expect(metaParaZerar(noFim, jornada, "2026-11-20", "2026-11-20")).toBeNull();
+      const negativo = devendo(HOJE, [dia("2026-11-04", ["08:00", "11:00", "12:00", "16:00"], { saldo: "-01:00" })]);
+      expect(metaParaZerar({ ...negativo, jornadaOk: false }, jornada, HOJE, "2026-11-20")).toBeNull();
+    });
   });
 });

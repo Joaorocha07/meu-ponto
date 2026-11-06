@@ -1,4 +1,5 @@
 import { CalendarCheck } from "lucide-react";
+import { DetalhesBatidas } from "@/components/detalhes-batidas";
 import { SeletorMes } from "@/components/seletor-mes";
 import { carregarMes, CLASSE_STATUS, ROTULO_STATUS } from "@/lib/dados";
 import { partesData } from "@/lib/periodo";
@@ -53,11 +54,14 @@ export default async function Cartao({ searchParams }: { searchParams: Promise<{
                   // O selo de situação já diz que é folga ou feriado.
                   const semJornada = dia.status === "folga" || dia.status === "feriado";
                   return (
-                    <tr key={dia.data}>
+                    <tr key={dia.data} className={semJornada ? `linha-${dia.status}` : undefined}>
                       <td className="celula-data">{semana}, {data}</td>
                       <td className="celula-marcas">
                         {semJornada ? null : dia.marcacoes.join(" · ") || dia.rotulo || "Sem marcações"}
                         {dia.motivo && <small>{dia.motivo}</small>}
+                        {dia.justificativa && <small>{dia.justificativa}</small>}
+                        {dia.avisos.map((aviso) => <small className="aviso-dia" key={aviso}>{aviso}</small>)}
+                        <DetalhesBatidas batidas={dia.batidas} />
                       </td>
                       <td className="celula-status">
                         <span className={`badge ${CLASSE_STATUS[dia.status]}`}>{ROTULO_STATUS[dia.status]}</span>
